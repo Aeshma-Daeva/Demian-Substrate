@@ -25,6 +25,77 @@ The important idea is simple: the visible surface is not the whole system. If
 you only save what the surface looks like, you lose the internal context that
 decides where the next steps go. A real capsule must save every channel.
 
+## Outside-Lab Observer Test
+
+Demian v1 was also attached to Abraxas, a separate combat-swarm simulation, as
+a zero-authority recurrent observer. This was not a "Demian controls the
+system" test. It was the opposite: Demian was purposely blocked from choosing
+actions so the run could ask a cleaner question.
+
+Can the substrate attach to an outside event stream, keep temporal continuity,
+and expose useful recurrent diagnostics without being allowed to cause the
+behavior it is measuring?
+
+The Abraxas bridge fed completed combat transitions into Demian after each
+combat cycle:
+
+```text
+Abraxas transition log
+  -> fixed combat feature vector + missing-value mask
+  -> folded coupling vector
+  -> DemianV1Runtime.step(coupling, strength=0.25)
+  -> surface, metrics, and recurrent capsule
+  -> Abraxas checkpoint/quorum evidence packet
+```
+
+Abraxas did not write directly into Demian's six channels. It supplied one
+structured coupling vector. Demian then routed that input through its own
+`fast`, `slow`, `control`, `message`, `carrier`, and `gate` state.
+
+Application-level readings were:
+
+| Channel | Abraxas reading |
+| --- | --- |
+| `fast` | Current tactical surface: latest resources, selected action, execution result, reward. |
+| `slow` | Mission continuity: objective progress, active objectives, durable memory priors, capsule continuity. |
+| `control` | Intervention pressure: Meta-Red confidence/noise, risk budget, Blue pressure, dispatch validity. |
+| `message` | Recent perturbation: action identity, macro identity, casualties, Blue response, zone pressure changes. |
+| `carrier` | Accumulated opponent/terrain pattern: threats, monitoring, decoys, blocked routes, spawn pressure. |
+| `gate` | Demian-internal relevance pressure and route modulation. |
+
+The result was substantial but bounded:
+
+| Campaign | Result |
+| --- | ---: |
+| 500-run validation | Demian available in 500/500 runs. |
+| 500-run validation | Full-state resume beat surface-only resume in 500/500 runs. |
+| 500-run validation | Ordered input differed from shuffled input in 500/500 runs. |
+| 500-run validation | Live recurrent state differed from frozen state in 500/500 runs. |
+| 1,000-run max calibration | Demian available in 1,000/1,000 runs. |
+| 1,000-run max calibration | 12 recurrent steps per run, all classified as `tight_cycle`. |
+
+The useful reading is not "Demian won." Demian did not make tactical choices.
+It observed a dynamic external system and preserved enough recurrent structure
+for Abraxas to include it in checkpoint evidence about convergence, repetition,
+spawn saturation, duplicate transfer keys, and curriculum pressure.
+
+What this proves:
+
+- Demian can run inside a non-lab application loop as an observe-only recurrent
+  diagnostic substrate.
+- Ordered temporal input is not equivalent to shuffled input.
+- Live recurrent state is not equivalent to frozen state.
+- Full recurrent capsules carry continuity that the visible surface alone does
+  not preserve.
+
+What this does not prove:
+
+- Demian should choose combat actions.
+- Demian improves tactical performance.
+- Demian has general decision authority.
+- A `tight_cycle` result is automatically good; in Abraxas it was useful
+  because it lined up with repeated spawn-heavy basin behavior.
+
 ## Why This Shape Exists
 
 Demian did not start with this six-channel runtime. The current shape is the
@@ -175,4 +246,3 @@ New package and runtime work belongs here. Broad experiments, sweeps, paper
 drafts, generated diagnostic figures, and raw campaign artifacts belong in
 Demian Lab. Historical mechanisms and superseded notes belong in Demian
 Archive.
-
