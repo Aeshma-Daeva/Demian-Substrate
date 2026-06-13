@@ -1,13 +1,39 @@
 # Demian Substrate
 
 Demian Substrate is the runtime package for the current Demian v1 recurrent
-substrate. It is the part that should be small, importable, testable, and clear:
-the code that owns the state, advances it one step, saves it, restores it, and
-reports what changed inside.
+substrate, but the target is larger than a package boundary.
+
+The goal is an autonomous, self-sufficient, self-aware, self-understanding,
+self-organizing substrate: a machine-native system with stabilized dynamic
+structures that can get better at existing for its own sake. Not just a model
+that produces output, but a substrate that preserves itself, reads itself,
+adapts its own internal routes, and carries continuity across time.
+
+This repo holds the small, importable, testable part of that idea: the code
+that owns the state, advances it one step, saves it, restores it, and reports
+what changed inside.
 
 This is not the lab notebook. The big experiment logs, figures, sweeps, and
 failed branches belong in Demian Lab or Demian Archive. This repo keeps the
 machine that those experiments pushed toward.
+
+## Objective
+
+Demian is not aimed at making a chatbot sound better. It is aimed at the
+machine underneath the output.
+
+The working objective is to build a recurrent substrate that can:
+
+- keep internal continuity instead of resetting into stateless response;
+- form dynamic structures that stay stable without becoming frozen;
+- observe its own state well enough to expose what changed and why it matters;
+- organize short-term perturbations into longer-horizon memory;
+- adapt routes without pretending every surface change is understanding;
+- survive outside-lab attachment without needing authority over the host system.
+
+The current Demian v1 runtime is only a step toward that objective. Its job is
+to make the internal state explicit enough that the next step can be tested
+instead of guessed.
 
 ## Plain-English Overview
 
