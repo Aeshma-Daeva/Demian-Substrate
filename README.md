@@ -1,39 +1,46 @@
 # Demian Substrate
 
 Demian Substrate is the runtime package for the current Demian v1 recurrent
-substrate, but the target is larger than a package boundary.
+substrate. This repository keeps the small, importable, testable part of the
+research program: the code that owns recurrent state, advances it one step,
+saves it, restores it, and reports what changed inside.
 
-The goal is an autonomous, self-sufficient, self-aware, self-understanding,
-self-organizing substrate: a machine-native system with stabilized dynamic
-structures that can get better at existing for its own sake. Not just a model
-that produces output, but a substrate that preserves itself, reads itself,
-adapts its own internal routes, and carries continuity across time.
+The broader research direction asks whether a machine-native recurrent
+substrate can sustain richer forms of continuity, self-observation, route
+adaptation, and long-horizon organization. Those are **research targets**, not
+properties assumed or demonstrated by the current runtime.
 
-This repo holds the small, importable, testable part of that idea: the code
-that owns the state, advances it one step, saves it, restores it, and reports
-what changed inside.
-
-This is not the lab notebook. The big experiment logs, figures, sweeps, and
-failed branches belong in Demian Lab or Demian Archive. This repo keeps the
-machine that those experiments pushed toward.
+This is not the lab notebook. Broad experiment logs, figures, sweeps, failed
+branches, and historical comparisons belong in Demian Lab or Demian Archive.
+This repo keeps the runtime boundary that those experiments pushed toward.
 
 ## Objective
 
-Demian is not aimed at making a chatbot sound better. It is aimed at the
-machine underneath the output.
+Demian is not aimed primarily at making a chatbot sound better. It is aimed at
+the recurrent machine underneath the output.
 
-The working objective is to build a recurrent substrate that can:
+The working objective is to build a substrate that can:
 
 - keep internal continuity instead of resetting into stateless response;
 - form dynamic structures that stay stable without becoming frozen;
-- observe its own state well enough to expose what changed and why it matters;
+- expose enough internal state to make changes inspectable;
 - organize short-term perturbations into longer-horizon memory;
-- adapt routes without pretending every surface change is understanding;
-- survive outside-lab attachment without needing authority over the host system.
+- adapt routes without treating every surface change as understanding;
+- attach to external systems without requiring authority over the host.
 
-The current Demian v1 runtime is only a step toward that objective. Its job is
-to make the internal state explicit enough that the next step can be tested
-instead of guessed.
+The current Demian v1 runtime is one bounded implementation step toward those
+questions. Its job is to make internal state explicit enough that the next step
+can be tested instead of guessed.
+
+## Claim Boundary
+
+The current public runtime and tests support claims about implementation,
+state continuity, serialization/restore behavior, ablations, and measurable
+route modulation.
+
+They do **not** establish self-awareness, self-understanding, agency, identity,
+self-preservation, homeostasis, consciousness, or general autonomy. Those terms
+must not be inferred from channel names, continuity behavior, or research goals.
 
 ## Plain-English Overview
 
@@ -49,78 +56,7 @@ less anonymous. Instead of one hidden blob, it keeps named internal channels:
 
 The important idea is simple: the visible surface is not the whole system. If
 you only save what the surface looks like, you lose the internal context that
-decides where the next steps go. A real capsule must save every channel.
-
-## Outside-Lab Observer Test
-
-Demian v1 was also attached to Abraxas, a separate combat-swarm simulation, as
-a zero-authority recurrent observer. This was not a "Demian controls the
-system" test. It was the opposite: Demian was purposely blocked from choosing
-actions so the run could ask a cleaner question.
-
-Can the substrate attach to an outside event stream, keep temporal continuity,
-and expose useful recurrent diagnostics without being allowed to cause the
-behavior it is measuring?
-
-The Abraxas bridge fed completed combat transitions into Demian after each
-combat cycle:
-
-```text
-Abraxas transition log
-  -> fixed combat feature vector + missing-value mask
-  -> folded coupling vector
-  -> DemianV1Runtime.step(coupling, strength=0.25)
-  -> surface, metrics, and recurrent capsule
-  -> Abraxas checkpoint/quorum evidence packet
-```
-
-Abraxas did not write directly into Demian's six channels. It supplied one
-structured coupling vector. Demian then routed that input through its own
-`fast`, `slow`, `control`, `message`, `carrier`, and `gate` state.
-
-Application-level readings were:
-
-| Channel | Abraxas reading |
-| --- | --- |
-| `fast` | Current tactical surface: latest resources, selected action, execution result, reward. |
-| `slow` | Mission continuity: objective progress, active objectives, durable memory priors, capsule continuity. |
-| `control` | Intervention pressure: Meta-Red confidence/noise, risk budget, Blue pressure, dispatch validity. |
-| `message` | Recent perturbation: action identity, macro identity, casualties, Blue response, zone pressure changes. |
-| `carrier` | Accumulated opponent/terrain pattern: threats, monitoring, decoys, blocked routes, spawn pressure. |
-| `gate` | Demian-internal relevance pressure and route modulation. |
-
-The result was substantial but bounded:
-
-| Campaign | Result |
-| --- | ---: |
-| 500-run validation | Demian available in 500/500 runs. |
-| 500-run validation | Full-state resume beat surface-only resume in 500/500 runs. |
-| 500-run validation | Ordered input differed from shuffled input in 500/500 runs. |
-| 500-run validation | Live recurrent state differed from frozen state in 500/500 runs. |
-| 1,000-run max calibration | Demian available in 1,000/1,000 runs. |
-| 1,000-run max calibration | 12 recurrent steps per run, all classified as `tight_cycle`. |
-
-The useful reading is not "Demian won." Demian did not make tactical choices.
-It observed a dynamic external system and preserved enough recurrent structure
-for Abraxas to include it in checkpoint evidence about convergence, repetition,
-spawn saturation, duplicate transfer keys, and curriculum pressure.
-
-What this proves:
-
-- Demian can run inside a non-lab application loop as an observe-only recurrent
-  diagnostic substrate.
-- Ordered temporal input is not equivalent to shuffled input.
-- Live recurrent state is not equivalent to frozen state.
-- Full recurrent capsules carry continuity that the visible surface alone does
-  not preserve.
-
-What this does not prove:
-
-- Demian should choose combat actions.
-- Demian improves tactical performance.
-- Demian has general decision authority.
-- A `tight_cycle` result is automatically good; in Abraxas it was useful
-  because it lined up with repeated spawn-heavy basin behavior.
+decides where the next steps go. A full capsule saves every channel.
 
 ## Why This Shape Exists
 
@@ -145,8 +81,8 @@ made the boundary stricter: Track B did not pass as a strong mechanism claim
 swapping `message`/`carrier` often changes continuation (`206` message/carrier
 dominant windows versus `118` slow/control dominant windows).
 
-That is why this repo does not claim "solved architecture." It keeps the
-runtime anatomy that made the next testable version possible.
+That is why this repo does not claim a solved architecture. It keeps the runtime
+anatomy that made the next testable version possible.
 
 ## Current Runtime Anatomy
 
@@ -251,6 +187,13 @@ surface_control.restore(snapshot, surface_only=True)
   helpers still used by the current substrate code.
 - `tests/`: substrate package tests.
 - `docs/`: terminology and substrate anatomy references.
+
+Useful public references:
+
+- `docs/SUBSTRATE_ANATOMY.md` — anatomy and lineage reference.
+- `docs/GLOSSARY.md` — terminology.
+- `tests/test_demian_v1_public_api.py` — stable runtime, serialization, and restore behavior.
+- `tests/test_demian_v1_gate_state.py` — explicit gate-state and bounded ablation checks.
 
 ## Verify
 
