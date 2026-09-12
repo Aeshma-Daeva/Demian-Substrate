@@ -7,7 +7,7 @@ import pytest
 
 from demian_v1 import DemianV1Config, DemianV1Runtime
 from demian_v1.audio_stream import AudioStreamConfig, DeterministicAudioCoupler, IncrementalAudioProcessor
-from demian_v1.live_audio import LiveAudioSession, LiveAudioState
+from demian_v1.live_audio import LiveAudioSession, LiveAudioState, run_timed_session
 
 
 class FakeCapture:
@@ -118,3 +118,15 @@ def test_session_cannot_start_again_after_terminal_stop(tmp_path) -> None:  # ty
 
     with pytest.raises(ValueError, match="live_audio_invalid_state"):
         session.start()
+
+
+def test_timed_session_stops_cleanly_with_fake_clock(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    capture = FakeCapture()
+    session = LiveAudioSession(_processor(), capture, output_dir=tmp_path, capacity_samples=20)
+    moments = iter([0.0, 0.0, 0.4, 1.0])
+
+    run_timed_session(session, duration_seconds=1.0, now=lambda: next(moments), sleep=lambda _: None)
+
+    assert session.state is LiveAudioState.STOPPED
+    assert capture.started is True
+    assert capture.stopped is True

@@ -214,6 +214,21 @@ Run only the public runtime and gate-state checks:
 python -m pytest tests/test_demian_v1_public_api.py tests/test_demian_v1_gate_state.py
 ```
 
+## Local live microphone boundary
+
+Live capture is optional and local-only. Install it with `pip install -e '.[audio]'`; importing the offline package does not require `sounddevice`. A run accepts one explicit input device, one explicit sample rate, and mono `float32` PCM. It never falls back to another device, resamples, reconnects, records raw audio, or sends anything over the network.
+
+List available devices, then choose one explicitly:
+
+```bash
+python -m development.probe_v1_live_audio --list-devices
+python -m development.probe_v1_live_audio --device 3 --sample-rate 48000 --duration 30 --output-dir SESSION
+```
+
+`frames.jsonl` contains derived acoustic frame traces. `events.jsonl` contains lifecycle and fault evidence. A bounded handoff queue preserves only a continuous accepted prefix: overflow, an oversized callback block, backend status/fault, processing fault, or writer fault makes the run terminally invalid instead of silently dropping data or inventing silence. Live boundary checkpoints contain derived counters/configuration only, never queued or pending raw PCM.
+
+This is software-level verification, not physical acceptance. Before treating a microphone experiment as accepted, directly check a 30-second speech/silence run, clean stop, pause/resume behavior (not implemented in this slice), and device-loss reporting on the actual selected hardware.
+
 ## Offline acoustic-dynamics probe
 
 The first sensory boundary accepts an uncompressed integer PCM WAV file,

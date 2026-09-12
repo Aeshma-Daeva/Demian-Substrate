@@ -6,6 +6,7 @@ from collections import deque
 from enum import Enum
 import json
 from pathlib import Path
+import time
 from typing import Callable, Protocol
 
 import numpy as np
@@ -169,4 +170,20 @@ class LiveAudioSession:
                 "processor_config": self.processor.snapshot()["config"]}
 
 
-__all__ = ["CaptureBackend", "LiveAudioSession", "LiveAudioState"]
+def run_timed_session(
+    session: LiveAudioSession, *, duration_seconds: float, now: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
+    """Run a timed session while keeping callback work confined to capture handoff."""
+    if duration_seconds <= 0:
+        raise ValueError("live_audio_duration_invalid")
+    session.start()
+    deadline = now() + duration_seconds
+    while session.state is LiveAudioState.RUNNING and now() < deadline:
+        session.drain()
+        sleep(0.01)
+    if session.state is LiveAudioState.RUNNING:
+        session.stop()
+
+
+__all__ = ["CaptureBackend", "LiveAudioSession", "LiveAudioState", "run_timed_session"]

@@ -12,6 +12,9 @@ dependencies = [
     "torch>=2.0",
 ]
 
+[project.optional-dependencies]
+audio = ["sounddevice>=0.4"]
+
 [tool.setuptools.packages.find]
 include = ["demian_v1*", "development*", "legacy*"]
 
