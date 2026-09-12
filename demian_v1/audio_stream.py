@@ -97,12 +97,14 @@ class IncrementalAudioProcessor:
         self._frame_index = config.frame_index_start
         self._finalized = False
 
-    def process_frame(self, frame: np.ndarray, sample_offset: int) -> dict[str, object]:
+    def process_frame(self, frame: np.ndarray, sample_offset: int, *, real_sample_count: int) -> dict[str, object]:
         features, coupling = self.coupler.encode(frame, self.config.sample_rate)
         step = self.runtime.step(coupling, strength=self.config.strength)
         row = {
             "segment_id": self.config.segment_id, "frame_index": self._frame_index,
             "sample_offset": sample_offset, "time_seconds": sample_offset / self.config.sample_rate,
+            "real_sample_count": real_sample_count,
+            "padded_sample_count": self.config.frame_size - real_sample_count,
             "features": features, "coupling": coupling.detach().cpu().tolist(), "surface": step["surface"],
             "channel_norms": {channel: float(torch.linalg.vector_norm(state).item())
                               for channel, state in zip(V1_CHANNELS, self.runtime.state, strict=True)},
@@ -114,13 +116,22 @@ class IncrementalAudioProcessor:
     def feed(self, samples: np.ndarray) -> list[dict[str, object]]:
         if self._finalized:
             raise ValueError("audio_stream_already_finalized")
-        chunk = np.asarray(samples, dtype=np.float32).reshape(-1)
+        raw = np.asarray(samples)
+        if raw.ndim != 1:
+            raise ValueError("audio_stream_samples_must_be_mono_1d")
+        try:
+            chunk = raw.astype(np.float32, copy=False)
+        except (TypeError, ValueError) as error:
+            raise ValueError("audio_stream_samples_invalid") from error
         if not np.all(np.isfinite(chunk)):
             raise ValueError("audio_stream_samples_invalid")
         self.pending_samples = np.concatenate((self.pending_samples, chunk))
         rows: list[dict[str, object]] = []
         while self.pending_samples.size >= self.config.frame_size:
-            rows.append(self.process_frame(self.pending_samples[:self.config.frame_size], self._pending_offset))
+            rows.append(self.process_frame(
+                self.pending_samples[:self.config.frame_size], self._pending_offset,
+                real_sample_count=self.config.frame_size,
+            ))
             self.pending_samples = self.pending_samples[self.config.hop_size:].copy()
             self._pending_offset += self.config.hop_size
         return rows
@@ -132,7 +143,7 @@ class IncrementalAudioProcessor:
         if not self.pending_samples.size:
             return []
         frame = np.pad(self.pending_samples, (0, self.config.frame_size - self.pending_samples.size))
-        row = self.process_frame(frame, self._pending_offset)
+        row = self.process_frame(frame, self._pending_offset, real_sample_count=self.pending_samples.size)
         self.pending_samples = np.empty(0, dtype=np.float32)
         return [row]
 
@@ -146,13 +157,21 @@ class IncrementalAudioProcessor:
         if snapshot.get("stream_id") != "demian-v1-audio-stream" or snapshot.get("config") != asdict(self.config):
             raise ValueError("audio_stream_config_mismatch")
         try:
-            pending = np.asarray(snapshot["pending_samples"], dtype=np.float32).reshape(-1)
-            offset, frame_index = int(snapshot["pending_offset"]), int(snapshot["frame_index"])
-            finalized = bool(snapshot["finalized"])
+            pending_raw = np.asarray(snapshot["pending_samples"])
+            if pending_raw.ndim != 1:
+                raise ValueError
+            pending = pending_raw.astype(np.float32, copy=False)
+            offset, frame_index = snapshot["pending_offset"], snapshot["frame_index"]
+            finalized = snapshot["finalized"]
             runtime, coupler = snapshot["runtime"], snapshot["coupler"]
         except (KeyError, TypeError, ValueError) as error:
             raise ValueError("audio_stream_snapshot_invalid") from error
-        if pending.size >= self.config.frame_size or not np.all(np.isfinite(pending)) or not isinstance(runtime, dict) or not isinstance(coupler, dict):
+        if (
+            type(offset) is not int or offset < 0 or type(frame_index) is not int or frame_index < 0
+            or type(finalized) is not bool or pending.size >= self.config.frame_size
+            or (finalized and pending.size != 0) or not np.all(np.isfinite(pending))
+            or not isinstance(runtime, dict) or not isinstance(coupler, dict)
+        ):
             raise ValueError("audio_stream_snapshot_invalid")
         # Validate on matching throwaway constructions before any live state changes.
         trial_runtime = DemianV1Runtime(self.runtime.config)

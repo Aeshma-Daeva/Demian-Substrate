@@ -37,6 +37,57 @@ def test_feed_defers_partial_frames_without_boundary_padding() -> None:
     assert processor.pending_samples.tolist() == _samples()[4:10].tolist()
 
 
+def test_feed_rejects_stereo_input_instead_of_flattening_it() -> None:
+    processor = _processor()
+
+    with pytest.raises(ValueError, match="audio_stream_samples_must_be_mono_1d"):
+        processor.feed(np.zeros((4, 2), dtype=np.float32))
+
+    assert processor.pending_samples.size == 0
+
+
+def test_trace_identifies_real_and_final_padding_samples() -> None:
+    processor = _processor()
+
+    assert processor.feed(_samples()[:9]) == []
+    row = processor.finalize()[0]
+
+    assert row["real_sample_count"] == 9
+    assert row["padded_sample_count"] == 1
+
+
+@pytest.mark.parametrize("partition_seed", [0, 4, 91])
+def test_seeded_random_chunk_partitions_match_offline(partition_seed: int) -> None:
+    samples = _samples()
+    random = np.random.default_rng(partition_seed)
+    streamed = _processor()
+    rows: list[dict[str, object]] = []
+    index = 0
+    while index < samples.size:
+        next_index = min(samples.size, index + int(random.integers(1, 8)))
+        rows.extend(streamed.feed(samples[index:next_index]))
+        index = next_index
+    rows.extend(streamed.finalize())
+
+    offline = _processor()
+    assert rows == offline.feed(samples) + offline.finalize()
+
+
+@pytest.mark.parametrize(("samples", "expected"), [
+    (np.empty(0, dtype=np.float32), []),
+    (np.ones(10, dtype=np.float32), [(10, 0), (6, 4)]),
+    (np.ones(14, dtype=np.float32), [(10, 0), (10, 0), (6, 4)]),
+    (np.ones(9, dtype=np.float32), [(9, 1)]),
+])
+def test_finalization_real_and_padded_counts_at_boundaries(
+    samples: np.ndarray, expected: list[tuple[int, int]],
+) -> None:
+    processor = _processor()
+    rows = processor.feed(samples) + processor.finalize()
+
+    assert [(row["real_sample_count"], row["padded_sample_count"]) for row in rows] == expected
+
+
 def test_random_chunking_matches_offline_frames_after_one_final_pad() -> None:
     samples = _samples()
     streamed = _processor()
@@ -79,6 +130,35 @@ def test_restore_rejects_incompatible_config_before_mutating_state() -> None:
 
     with pytest.raises(ValueError, match="audio_stream_config_mismatch"):
         processor.restore(incompatible)
+
+    assert processor.snapshot() == before
+
+
+@pytest.mark.parametrize(("field", "value"), [
+    ("finalized", 1), ("pending_offset", -1), ("frame_index", -1),
+])
+def test_restore_rejects_invalid_scalar_state_before_mutating_state(field: str, value: object) -> None:
+    processor = _processor()
+    processor.feed(_samples()[:13])
+    before = processor.snapshot()
+    malformed = dict(before)
+    malformed[field] = value
+
+    with pytest.raises(ValueError, match="audio_stream_snapshot_invalid"):
+        processor.restore(malformed)
+
+    assert processor.snapshot() == before
+
+
+def test_restore_rejects_finalized_snapshot_with_pending_pcm_before_mutating_state() -> None:
+    processor = _processor()
+    processor.feed(_samples()[:13])
+    before = processor.snapshot()
+    malformed = dict(before)
+    malformed["finalized"] = True
+
+    with pytest.raises(ValueError, match="audio_stream_snapshot_invalid"):
+        processor.restore(malformed)
 
     assert processor.snapshot() == before
 
