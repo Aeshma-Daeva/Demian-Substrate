@@ -75,3 +75,18 @@ def test_checkpoint_requires_closed_segment_and_restore_is_new_segment(tmp_path)
     assert restored.state is SegmentedState.PAUSED
     restored.resume()
     assert restored.current_segment_id == "restore-001"
+
+
+def test_restore_rejects_invalid_checkpoint_before_runtime_mutation(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    runtime = DemianV1Runtime(DemianV1Config(hidden_size=8, seed=4))
+    before = runtime.snapshot().to_dict()
+    def processor(segment_id: str, frame_index: int) -> IncrementalAudioProcessor:
+        return IncrementalAudioProcessor(AudioStreamConfig(1_000, 4, 4, segment_id=segment_id, frame_index_start=frame_index), runtime=runtime, coupler=DeterministicAudioCoupler(8, projection_seed=6))
+    checkpoint = {"checkpoint_id": "demian-v1-segmented-live-audio", "schema_version": 1, "valid": False,
+                  "state": "PAUSED", "session_id": "invalid", "frame_index": 0, "lineage": [],
+                  "runtime": before, "projection": {"projection_seed": 6, "output_gain": 0.75,
+                                                   "weights": processor("invalid", 0).coupler.weights.detach().cpu().tolist()}}
+    with pytest.raises(ValueError, match="segmented_audio_checkpoint_invalid"):
+        SegmentedLiveAudioSession.restore(checkpoint, processor_factory=processor, capture_factory=Capture,
+                                          output_dir=tmp_path, capacity_samples=20)
+    assert runtime.snapshot().to_dict() == before

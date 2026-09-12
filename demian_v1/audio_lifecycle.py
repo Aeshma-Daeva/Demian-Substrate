@@ -159,11 +159,13 @@ class SegmentedLiveAudioSession:
         try:
             if checkpoint["checkpoint_id"] != "demian-v1-segmented-live-audio" or checkpoint["schema_version"] != 1:
                 raise ValueError
+            if checkpoint["valid"] is not True:
+                raise ValueError
             if checkpoint["state"] not in (SegmentedState.PAUSED.value, SegmentedState.STOPPED.value):
                 raise ValueError
             session_id, frame_index, lineage, runtime_data, projection = (
                 checkpoint["session_id"], checkpoint["frame_index"], checkpoint["lineage"], checkpoint["runtime"], checkpoint["projection"])
-            if not isinstance(session_id, str) or type(frame_index) is not int or frame_index < 0 or not isinstance(lineage, list):
+            if not isinstance(session_id, str) or type(frame_index) is not int or frame_index < 0 or not lineage or not isinstance(lineage, list):
                 raise ValueError
             if not isinstance(runtime_data, dict) or not isinstance(projection, dict):
                 raise ValueError
