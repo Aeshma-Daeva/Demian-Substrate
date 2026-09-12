@@ -176,6 +176,11 @@ surface_control.restore(snapshot, surface_only=True)
 - `channels`: `fast`, `slow`, `control`, `message`, `carrier`, `gate`.
 - `model_state`: flattened model parameters for reproducible handoff.
 
+Restore intentionally requires the receiving runtime to have the same
+construction config. It restores recurrent state into that matching,
+deterministically constructed model; it is not a general model-parameter
+loader.
+
 ## Repository Contents
 
 - `demian_v1/`: stable public runtime and capsule API.
@@ -235,6 +240,20 @@ row records the frame index and time, acoustic features, injected coupling,
 surface output, six channel norms, and runtime metrics. The extractor and
 runtime both support snapshots, so callers can preserve temporal continuity
 and continue with explicit global frame/sample offsets.
+
+## Incremental acoustic framing
+
+`IncrementalAudioProcessor` uses the same path as the offline probe while
+accepting arbitrary local mono float-PCM chunks. It retains only the overlap
+and incomplete tail, emits a frame only when complete, and pads one final
+partial frame only when `finalize()` is called. JSON snapshots include pending
+samples, absolute offsets, segment/config identity, coupler projection identity,
+extractor state, and full recurrent state. Restoring into a processor with a
+different construction/config is rejected before changing live state.
+
+This is a deterministic processing foundation, not microphone capture. No
+audio is retained by the component after it has been framed, except the bounded
+overlap/tail needed to form the next frame.
 
 This probe is deliberately limited to offline WAV input. It does not capture a
 microphone, stream audio, recognize speech, infer emotion or identity, learn,

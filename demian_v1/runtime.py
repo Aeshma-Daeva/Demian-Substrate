@@ -119,6 +119,8 @@ class DemianV1Runtime:
         payload = snapshot.to_dict() if isinstance(snapshot, DemianV1Snapshot) else dict(snapshot)
         if payload.get("runtime_id") != DEMIAN_V1_ID:
             raise ValueError("demian_v1_runtime_id_mismatch")
+        if payload.get("config") != asdict(self.config):
+            raise ValueError("demian_v1_config_mismatch")
         channels = deserialize_state(dict(payload.get("channels") or {}))
         if surface_only:
             surface = self.model.state_vector(channels).detach()

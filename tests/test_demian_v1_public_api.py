@@ -18,6 +18,13 @@ def test_public_runtime_uses_stable_identity_and_six_channel_capsules() -> None:
     assert snapshot.step_index == 1
 
 
+def test_incremental_audio_processor_is_available_from_the_stable_package_boundary() -> None:
+    from demian_v1 import AudioStreamConfig, IncrementalAudioProcessor
+
+    assert AudioStreamConfig.__name__ == "AudioStreamConfig"
+    assert IncrementalAudioProcessor.__name__ == "IncrementalAudioProcessor"
+
+
 def test_state_serialization_round_trip_preserves_every_channel() -> None:
     runtime = DemianV1Runtime(DemianV1Config(hidden_size=8, seed=102))
     runtime.step()

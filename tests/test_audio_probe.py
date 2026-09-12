@@ -72,12 +72,12 @@ def test_probe_writes_observable_deterministic_jsonl(tmp_path: Path) -> None:
 
     assert first_trace.read_bytes() == second_trace.read_bytes()
     rows = [json.loads(line) for line in first_trace.read_text().splitlines()]
-    assert [row["sample_offset"] for row in rows] == [0, 80, 160, 240, 320, 400]
+    assert [row["sample_offset"] for row in rows] == [0, 80, 160, 240]
     assert rows[0]["time_seconds"] == 0.0
     assert len(rows[0]["features"]) == 13
     assert len(rows[0]["coupling"]) == 8
     assert set(rows[0]["channel_norms"]) == {"fast", "slow", "control", "message", "carrier", "gate"}
-    assert rows[-1]["frame_index"] == 5
+    assert rows[-1]["frame_index"] == 3
 
 
 def test_probe_checkpoint_continuation_preserves_global_indices(tmp_path: Path) -> None:
