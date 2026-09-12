@@ -209,6 +209,40 @@ Run only the public runtime and gate-state checks:
 python -m pytest tests/test_demian_v1_public_api.py tests/test_demian_v1_gate_state.py
 ```
 
+## Offline acoustic-dynamics probe
+
+The first sensory boundary accepts an uncompressed integer PCM WAV file,
+measures 13 non-semantic acoustic features in overlapping frames, projects
+them through a fixed seeded matrix, and supplies the resulting bounded vector
+to `DemianV1Runtime.step`. The runtime's recurrence—not a hand-authored mapping
+from acoustic qualities to channel names—determines how the perturbation moves.
+
+Run it from the repository root:
+
+```bash
+python -m development.probe_v1_voice_dynamics INPUT.wav \
+  --output trace.jsonl \
+  --hidden-size 32 \
+  --runtime-seed 0 \
+  --projection-seed 0 \
+  --strength 0.15 \
+  --frame-ms 25 \
+  --hop-ms 10
+```
+
+Without `--output`, `voice.wav` produces `voice.demian-voice.jsonl`. Each JSONL
+row records the frame index and time, acoustic features, injected coupling,
+surface output, six channel norms, and runtime metrics. The extractor and
+runtime both support snapshots, so callers can preserve temporal continuity
+and continue with explicit global frame/sample offsets.
+
+This probe is deliberately limited to offline WAV input. It does not capture a
+microphone, stream audio, recognize speech, infer emotion or identity, learn,
+or demonstrate understanding, agency, or consciousness. It supports the
+narrower observation that measured acoustic changes can deterministically
+perturb the recurrent substrate and that the resulting internal trajectory can
+be inspected.
+
 ## Boundary
 
 New package and runtime work belongs here. Broad experiments, sweeps, paper

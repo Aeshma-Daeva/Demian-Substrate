@@ -1,5 +1,7 @@
 """Stable public API for the synthesized Demian v1 recurrent substrate."""
 
+from demian_v1.audio_dynamics import FEATURE_NAMES, AudioFeatureExtractor
+from demian_v1.audio_probe import DeterministicAudioCoupler, read_pcm_wav, run_audio_probe
 from demian_v1.runtime import (
     DEMIAN_V1_ID,
     DemianV1Config,
@@ -23,7 +25,10 @@ from development.demian_v1_gate_state import (
 
 __all__ = [
     "DEMIAN_V1_ID",
+    "FEATURE_NAMES",
     "V1_CHANNELS",
+    "AudioFeatureExtractor",
+    "DeterministicAudioCoupler",
     "DemianV1Config",
     "DemianV1GateState",
     "DemianV1Runtime",
@@ -35,7 +40,9 @@ __all__ = [
     "clone_state",
     "compare_v1_resume",
     "deserialize_state",
+    "read_pcm_wav",
     "run_v1_trace",
+    "run_audio_probe",
     "serialize_state",
     "surface_only_resume_state",
 ]
