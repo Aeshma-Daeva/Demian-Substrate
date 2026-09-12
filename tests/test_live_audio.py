@@ -69,6 +69,11 @@ def test_session_overflow_latches_terminal_fault_without_dropping_old_blocks(tmp
     capture.emit(np.ones(10, dtype=np.float32))
     capture.emit(np.ones(1, dtype=np.float32))
 
+    assert session.state is LiveAudioState.RUNNING
+    assert capture.stopped is False
+    assert "failed" not in (tmp_path / "events.jsonl").read_text()
+    session.drain()
+
     assert session.state is LiveAudioState.FAILED
     assert session.summary["failure"]["kind"] == "buffer_overflow"
     assert session.summary["accepted_samples"] == 10
@@ -80,6 +85,9 @@ def test_session_rejects_oversize_callback_before_accepting_any_samples(tmp_path
     session = LiveAudioSession(_processor(), capture, output_dir=tmp_path, capacity_samples=10)
     session.start()
     capture.emit(np.ones(11, dtype=np.float32))
+
+    assert session.state is LiveAudioState.RUNNING
+    session.drain()
 
     assert session.state is LiveAudioState.FAILED
     assert session.summary["failure"]["kind"] == "oversize_callback_block"
@@ -93,8 +101,67 @@ def test_session_capture_fault_is_terminal_even_when_queue_is_not_full(tmp_path)
     capture.emit(np.ones(2, dtype=np.float32))
     capture.fail("device_lost")
 
+    assert session.state is LiveAudioState.RUNNING
+    assert capture.stopped is False
+    session.drain()
+
     assert session.state is LiveAudioState.FAILED
     assert session.summary["failure"] == {"kind": "capture_fault", "detail": "device_lost"}
+
+
+def test_start_fault_is_finalized_after_backend_returns(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    class StartFailure(FakeCapture):
+        def start(self, on_block, on_fault) -> None:  # type: ignore[no-untyped-def]
+            self.started = True
+            on_fault("unavailable")
+
+    capture = StartFailure()
+    session = LiveAudioSession(_processor(), capture, output_dir=tmp_path, capacity_samples=20)
+
+    session.start()
+
+    assert session.state is LiveAudioState.FAILED
+    assert capture.stopped is True
+    assert session.summary["failure"] == {"kind": "capture_fault", "detail": "unavailable"}
+
+
+def test_callback_block_arriving_during_start_is_preserved(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    class ImmediateBlock(FakeCapture):
+        def start(self, on_block, on_fault) -> None:  # type: ignore[no-untyped-def]
+            self.started = True
+            on_block(np.ones(4, dtype=np.float32))
+
+    capture = ImmediateBlock()
+    session = LiveAudioSession(_processor(), capture, output_dir=tmp_path, capacity_samples=20)
+
+    session.start()
+
+    assert session.state is LiveAudioState.RUNNING
+    assert session.summary["accepted_samples"] == 4
+
+
+def test_callback_block_arriving_while_main_thread_drains_is_preserved(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    capture = FakeCapture()
+    processor = _processor()
+    session = LiveAudioSession(processor, capture, output_dir=tmp_path, capacity_samples=20)
+    original_feed = processor.feed
+    emitted = False
+
+    def feed_with_concurrent_callback(samples):  # type: ignore[no-untyped-def]
+        nonlocal emitted
+        if not emitted:
+            emitted = True
+            capture.emit(np.ones(4, dtype=np.float32))
+        return original_feed(samples)
+
+    processor.feed = feed_with_concurrent_callback  # type: ignore[method-assign]
+    session.start()
+    capture.emit(np.ones(10, dtype=np.float32))
+
+    session.drain()
+
+    assert session.state is LiveAudioState.RUNNING
+    assert session.summary["accepted_samples"] == 14
 
 
 def test_live_checkpoint_excludes_pending_raw_pcm(tmp_path) -> None:  # type: ignore[no-untyped-def]

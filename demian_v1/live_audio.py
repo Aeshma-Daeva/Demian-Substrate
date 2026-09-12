@@ -45,6 +45,8 @@ class LiveAudioSession:
         self._accepted_samples = 0
         self._peak_occupancy = 0
         self._failure: dict[str, str] | None = None
+        self._pending_failure: dict[str, str] | None = None
+        self._accepting = False
         self._frames_file = None
         self._events_file = None
 
@@ -72,16 +74,26 @@ class LiveAudioSession:
             self._events_file = (self.output_dir / "events.jsonl").open("x", encoding="utf-8")
             self.state = LiveAudioState.STARTING
             self._event("started", **self.summary)
+            self._accepting = True
             self.capture.start(self.accept_block, self.capture_fault)
-            self.state = LiveAudioState.RUNNING
+            if self._pending_failure is None:
+                self.state = LiveAudioState.RUNNING
+            else:
+                self._complete_pending_failure()
         except Exception as error:
             self._fail("start_failure", str(error))
+
+    def _latch_failure(self, kind: str, detail: str) -> None:
+        """Record a terminal callback fault without capture control or file I/O."""
+        if self._pending_failure is None and self._failure is None:
+            self._pending_failure = {"kind": kind, "detail": detail}
 
     def _fail(self, kind: str, detail: str) -> None:
         if self.state is LiveAudioState.FAILED:
             return
         self._failure = {"kind": kind, "detail": detail}
         self.state = LiveAudioState.FAILED
+        self._accepting = False
         try:
             self.capture.stop()
         except Exception:
@@ -99,23 +111,27 @@ class LiveAudioSession:
 
     def accept_block(self, samples: np.ndarray) -> None:
         """Callback entry: copy and enqueue only; never processes or writes frames."""
-        if self.state is not LiveAudioState.RUNNING:
+        if not self._accepting or self.state not in (
+            LiveAudioState.STARTING,
+            LiveAudioState.RUNNING,
+            LiveAudioState.DRAINING,
+        ) or self._pending_failure is not None:
             return
         raw = np.asarray(samples)
         if raw.ndim != 1:
-            self._fail("invalid_callback_block", "samples_must_be_mono_1d")
+            self._latch_failure("invalid_callback_block", "samples_must_be_mono_1d")
             return
         try:
             block = raw.astype(np.float32, copy=True)
         except (TypeError, ValueError):
-            self._fail("invalid_callback_block", "samples_not_float_compatible")
+            self._latch_failure("invalid_callback_block", "samples_not_float_compatible")
             return
         if not np.all(np.isfinite(block)):
-            self._fail("invalid_callback_block", "samples_not_finite")
+            self._latch_failure("invalid_callback_block", "samples_not_finite")
         elif block.size > self.capacity_samples:
-            self._fail("oversize_callback_block", "block_exceeds_capacity")
+            self._latch_failure("oversize_callback_block", "block_exceeds_capacity")
         elif self._queued_samples + block.size > self.capacity_samples:
-            self._fail("buffer_overflow", "bounded_handoff_full")
+            self._latch_failure("buffer_overflow", "bounded_handoff_full")
         else:
             self._queue.append(block)
             self._queued_samples += block.size
@@ -123,21 +139,45 @@ class LiveAudioSession:
             self._peak_occupancy = max(self._peak_occupancy, self._queued_samples)
 
     def capture_fault(self, detail: str) -> None:
-        self._fail("capture_fault", str(detail))
+        self._latch_failure("capture_fault", str(detail))
+
+    def _write_queued_frames(self) -> None:
+        while self._queue:
+            block = self._queue.popleft()
+            self._queued_samples -= block.size
+            for row in self.processor.feed(block):
+                assert self._frames_file is not None
+                self._frames_file.write(json.dumps(row, allow_nan=False) + "\n")
+        assert self._frames_file is not None
+        self._frames_file.flush()
+
+    def _complete_pending_failure(self) -> None:
+        pending = self._pending_failure
+        if pending is None:
+            return
+        self._accepting = False
+        self.state = LiveAudioState.DRAINING
+        try:
+            self.capture.stop()
+            self._write_queued_frames()
+        except Exception as error:
+            pending = {"kind": "processing_or_writer_fault", "detail": str(error)}
+        self._pending_failure = None
+        self._failure = pending
+        self.state = LiveAudioState.FAILED
+        if self._events_file is not None:
+            self._event("failed", failure=self._failure)
+        self._close_files()
 
     def drain(self) -> None:
         if self.state is not LiveAudioState.RUNNING:
             return
+        if self._pending_failure is not None:
+            self._complete_pending_failure()
+            return
         self.state = LiveAudioState.DRAINING
         try:
-            while self._queue:
-                block = self._queue.popleft()
-                self._queued_samples -= block.size
-                for row in self.processor.feed(block):
-                    assert self._frames_file is not None
-                    self._frames_file.write(json.dumps(row, allow_nan=False) + "\n")
-            assert self._frames_file is not None
-            self._frames_file.flush()
+            self._write_queued_frames()
             self.state = LiveAudioState.RUNNING
         except Exception as error:
             self._fail("processing_or_writer_fault", str(error))
@@ -147,15 +187,16 @@ class LiveAudioSession:
             return
         if self.state is not LiveAudioState.RUNNING:
             raise ValueError("live_audio_invalid_state")
-        self.drain()
-        if self.state is LiveAudioState.FAILED:
-            return
         try:
+            self._accepting = False
+            self.capture.stop()
+            self.drain()
+            if self.state is LiveAudioState.FAILED:
+                return
             assert self._frames_file is not None
             for row in self.processor.finalize():
                 self._frames_file.write(json.dumps(row, allow_nan=False) + "\n")
             self._frames_file.flush()
-            self.capture.stop()
             self.state = LiveAudioState.STOPPED
             self._event("stopped", **self.summary)
             self._close_files()
