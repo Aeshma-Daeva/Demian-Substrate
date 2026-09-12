@@ -183,7 +183,7 @@ class LiveAudioSession:
             self._fail("processing_or_writer_fault", str(error))
 
     def stop(self) -> None:
-        if self.state is LiveAudioState.FAILED:
+        if self.state in (LiveAudioState.FAILED, LiveAudioState.STOPPED):
             return
         if self.state is not LiveAudioState.RUNNING:
             raise ValueError("live_audio_invalid_state")

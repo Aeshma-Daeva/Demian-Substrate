@@ -187,6 +187,16 @@ def test_session_cannot_start_again_after_terminal_stop(tmp_path) -> None:  # ty
         session.start()
 
 
+def test_stop_is_idempotent_after_clean_terminal_stop(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    capture = FakeCapture()
+    session = LiveAudioSession(_processor(), capture, output_dir=tmp_path, capacity_samples=20)
+    session.start()
+    session.stop()
+    session.stop()
+
+    assert session.state is LiveAudioState.STOPPED
+
+
 def test_timed_session_stops_cleanly_with_fake_clock(tmp_path) -> None:  # type: ignore[no-untyped-def]
     capture = FakeCapture()
     session = LiveAudioSession(_processor(), capture, output_dir=tmp_path, capacity_samples=20)
