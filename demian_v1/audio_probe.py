@@ -16,18 +16,9 @@ from demian_v1.audio_stream import (
 from demian_v1.runtime import DemianV1Config, DemianV1Runtime
 
 
-def read_pcm_wav(path: str | Path) -> tuple[int, np.ndarray]:
-    """Read integer PCM WAV and mix channels to mono."""
-
-    with wave.open(str(path), "rb") as source:
-        if source.getcomptype() != "NONE":
-            raise ValueError("audio_wav_must_be_uncompressed_pcm")
-        channels = source.getnchannels()
-        width = source.getsampwidth()
-        sample_rate = source.getframerate()
-        frames = source.getnframes()
-        payload = source.readframes(frames)
-    if channels < 1 or width not in (1, 2, 3, 4) or sample_rate <= 0:
+def decode_pcm_payload(payload: bytes, *, channels: int, width: int) -> np.ndarray:
+    """Decode a byte-aligned integer PCM payload and mix it to mono."""
+    if channels < 1 or width not in (1, 2, 3, 4):
         raise ValueError("audio_wav_format_unsupported")
     if width == 1:
         decoded = (np.frombuffer(payload, dtype=np.uint8).astype(np.float64) - 128.0) / 128.0
@@ -43,7 +34,23 @@ def read_pcm_wav(path: str | Path) -> tuple[int, np.ndarray]:
     if decoded.size % channels:
         raise ValueError("audio_wav_payload_misaligned")
     mono = decoded.reshape(-1, channels).mean(axis=1)
-    return sample_rate, mono.astype(np.float32)
+    return mono.astype(np.float32)
+
+
+def read_pcm_wav(path: str | Path) -> tuple[int, np.ndarray]:
+    """Read integer PCM WAV and mix channels to mono."""
+
+    with wave.open(str(path), "rb") as source:
+        if source.getcomptype() != "NONE":
+            raise ValueError("audio_wav_must_be_uncompressed_pcm")
+        channels = source.getnchannels()
+        width = source.getsampwidth()
+        sample_rate = source.getframerate()
+        frames = source.getnframes()
+        payload = source.readframes(frames)
+    if sample_rate <= 0:
+        raise ValueError("audio_wav_format_unsupported")
+    return sample_rate, decode_pcm_payload(payload, channels=channels, width=width)
 
 
 def iter_audio_frames(samples: np.ndarray, frame_size: int, hop_size: int) -> Iterator[tuple[int, np.ndarray]]:
@@ -101,6 +108,7 @@ def run_audio_probe(
 
 __all__ = [
     "DeterministicAudioCoupler",
+    "decode_pcm_payload",
     "iter_audio_frames",
     "read_pcm_wav",
     "run_audio_probe",

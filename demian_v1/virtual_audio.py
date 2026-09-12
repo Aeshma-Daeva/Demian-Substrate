@@ -5,10 +5,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 import time
+import wave
 
 import numpy as np
 
-from demian_v1.audio_probe import read_pcm_wav
+from demian_v1.audio_probe import decode_pcm_payload
 
 
 class WavCaptureBackend:
@@ -22,15 +23,34 @@ class WavCaptureBackend:
                  paced: bool = False) -> None:
         if not callback_sizes or any(type(size) is not int or size <= 0 for size in callback_sizes):
             raise ValueError("wav_capture_schedule_invalid")
-        self.sample_rate, self._samples = read_pcm_wav(source)
+        self._source = wave.open(str(source), "rb")
+        if self._source.getcomptype() != "NONE":
+            self._source.close()
+            raise ValueError("audio_wav_must_be_uncompressed_pcm")
+        self._channels = self._source.getnchannels()
+        self._width = self._source.getsampwidth()
+        self.sample_rate = self._source.getframerate()
+        if self._channels < 1 or self._width not in (1, 2, 3, 4) or self.sample_rate <= 0:
+            self._source.close()
+            raise ValueError("audio_wav_format_unsupported")
         self.callback_sizes, self.paced = callback_sizes, paced
-        self._offset = 0
         self._schedule_index = 0
+        self._last_emitted_samples = 0
         self._on_block: Callable[[np.ndarray], None] | None = None
         self._on_fault: Callable[[str], None] | None = None
         self._started = False
         self._stopped = False
         self.eof = False
+
+    @property
+    def buffered_samples(self) -> int:
+        """PCM retained by this object; callbacks own the current short block."""
+        return 0
+
+    def _close_source(self) -> None:
+        if self._source is not None:
+            self._source.close()
+            self._source = None
 
     def start(self, on_block: Callable[[np.ndarray], None], on_fault: Callable[[str], None]) -> None:
         if self._started:
@@ -39,9 +59,11 @@ class WavCaptureBackend:
 
     def stop(self) -> None:
         self._stopped = True
+        self._close_source()
 
     def _fault(self, detail: str) -> None:
         self._stopped = True
+        self._close_source()
         if self._on_fault is not None:
             self._on_fault(detail)
 
@@ -51,32 +73,40 @@ class WavCaptureBackend:
             raise ValueError("wav_capture_not_started")
         if self._stopped or self.eof:
             return False
-        if self._offset >= self._samples.size:
+        if self._source is None:
             self.eof = True
+            return False
+        if self._source.tell() >= self._source.getnframes():
+            self.eof = True
+            self._close_source()
             return False
         size = self.callback_sizes[self._schedule_index % len(self.callback_sizes)]
         self._schedule_index += 1
-        next_offset = min(self._offset + size, self._samples.size)
-        block = self._samples[self._offset:next_offset].copy()
-        self._offset = next_offset
+        payload = self._source.readframes(size)
+        block = decode_pcm_payload(payload, channels=self._channels, width=self._width)
+        if not block.size:
+            self.eof = True
+            self._close_source()
+            return False
+        self._last_emitted_samples = block.size
         try:
             assert self._on_block is not None
             self._on_block(block)
         except Exception as error:
             self._fault(f"wav_callback_failure:{error}")
             return False
-        if self._offset >= self._samples.size:
+        if self._source is None or self._source.tell() >= self._source.getnframes():
             self.eof = True
+            self._close_source()
         return True
 
     def run(self, *, sleep: Callable[[float], None] = time.sleep) -> None:
         """Consume to EOF; pacing is deliberately outside the callback."""
         while not self._stopped and not self.eof:
-            before = self._offset
             if not self.pump():
                 break
             if self.paced:
-                sleep((self._offset - before) / self.sample_rate)
+                sleep(self._last_emitted_samples / self.sample_rate)
 
 
 __all__ = ["WavCaptureBackend"]

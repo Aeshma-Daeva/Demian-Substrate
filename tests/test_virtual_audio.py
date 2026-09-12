@@ -33,6 +33,7 @@ def test_wav_capture_pumps_seeded_partitions_through_callback_and_eof(tmp_path) 
     assert faults == []
     assert capture.eof is True
     assert capture.pump() is False
+    assert capture._source is None  # type: ignore[attr-defined]
 
 
 def test_wav_capture_rejects_invalid_schedule_and_latches_callback_fault(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -47,3 +48,24 @@ def test_wav_capture_rejects_invalid_schedule_and_latches_callback_fault(tmp_pat
 
     assert capture.pump() is False
     assert faults == ["wav_callback_failure:callback_broke"]
+    assert capture._source is None  # type: ignore[attr-defined]
+
+
+def test_wav_capture_construction_does_not_read_or_retain_the_full_pcm_payload(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    path = tmp_path / "long.wav"
+    _write_wav(path, np.linspace(-1, 1, 100_000, dtype=np.float32))
+    original = wave.Wave_read.readframes
+
+    def fail_if_read(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("payload_read_during_construction")
+
+    monkeypatch.setattr(wave.Wave_read, "readframes", fail_if_read)
+    capture = WavCaptureBackend(path, callback_sizes=(17, 31))
+
+    assert capture.buffered_samples == 0
+    monkeypatch.setattr(wave.Wave_read, "readframes", original)
+    blocks: list[np.ndarray] = []
+    capture.start(blocks.append, lambda _: None)
+    assert capture.pump() is True
+    assert blocks[0].size == 17
+    assert capture.buffered_samples <= 31
