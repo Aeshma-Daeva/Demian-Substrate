@@ -1,21 +1,20 @@
 from __future__ import annotations
 
-import builtins
-
 import pytest
 
+from demian_v1 import audio_capture
 from demian_v1.audio_capture import SoundDeviceCapture
 
 
 def test_optional_sounddevice_adapter_does_not_import_hardware_package_until_constructed(monkeypatch) -> None:
-    real_import = builtins.__import__
+    real_import_module = audio_capture.importlib.import_module
 
-    def missing_sounddevice(name: str, *args: object, **kwargs: object) -> object:
+    def missing_sounddevice(name: str) -> object:
         if name == "sounddevice":
             raise ImportError("not installed")
-        return real_import(name, *args, **kwargs)
+        return real_import_module(name)
 
-    monkeypatch.setattr(builtins, "__import__", missing_sounddevice)
+    monkeypatch.setattr(audio_capture.importlib, "import_module", missing_sounddevice)
 
     with pytest.raises(RuntimeError, match="sounddevice_unavailable"):
         SoundDeviceCapture(device=3, sample_rate=48_000)
