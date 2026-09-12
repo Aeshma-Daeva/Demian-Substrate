@@ -3,6 +3,9 @@
 from demian_v1.audio_dynamics import FEATURE_NAMES, AudioFeatureExtractor
 from demian_v1.audio_probe import DeterministicAudioCoupler, read_pcm_wav, run_audio_probe
 from demian_v1.audio_stream import AudioStreamConfig, IncrementalAudioProcessor
+from demian_v1.audio_lifecycle import SegmentedLiveAudioSession, SegmentedState
+from demian_v1.live_audio import CaptureBackend, LiveAudioSession, LiveAudioState
+from demian_v1.virtual_audio import WavCaptureBackend
 from demian_v1.runtime import (
     DEMIAN_V1_ID,
     DemianV1Config,
@@ -45,7 +48,13 @@ __all__ = [
     "run_v1_trace",
     "run_audio_probe",
     "AudioStreamConfig",
+    "CaptureBackend",
     "IncrementalAudioProcessor",
+    "LiveAudioSession",
+    "LiveAudioState",
+    "SegmentedLiveAudioSession",
+    "SegmentedState",
     "serialize_state",
     "surface_only_resume_state",
+    "WavCaptureBackend",
 ]

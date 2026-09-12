@@ -227,7 +227,51 @@ python -m development.probe_v1_live_audio --device 3 --sample-rate 48000 --durat
 
 `frames.jsonl` contains derived acoustic frame traces. `events.jsonl` contains lifecycle and fault evidence. A bounded handoff queue preserves only a continuous accepted prefix: overflow, an oversized callback block, backend status/fault, processing fault, or writer fault makes the run terminally invalid instead of silently dropping data or inventing silence. Live boundary checkpoints contain derived counters/configuration only, never queued or pending raw PCM.
 
-This is software-level verification, not physical acceptance. Before treating a microphone experiment as accepted, directly check a 30-second speech/silence run, clean stop, pause/resume behavior (not implemented in this slice), and device-loss reporting on the actual selected hardware.
+This is software-level verification, not physical acceptance. Before treating a microphone experiment as accepted, directly check a 30-second speech/silence run, clean stop, pause/resume behavior, and device-loss reporting on the actual selected hardware.
+
+## Virtual live-audio validation
+
+The offline virtual source drives a local integer-PCM WAV through the same
+`LiveAudioSession` callback handoff used by optional microphone capture. It
+uses deterministic callback partitions and produces only derived
+`frames.jsonl`/`events.jsonl`; it does not copy the WAV into the output.
+
+Generate a controlled corpus (all signals are synthesized locally, not music
+or speech):
+
+```bash
+for signal in silence tone120 tone300 quiet_loud sweep noise_burst rhythm; do
+  python -m development.virtual_audio_experiment --signal "$signal" \
+    --duration 2 --output-dir "outputs/virtual-$signal"
+done
+```
+
+Or exercise a local PCM WAV without retaining it in the trace directory:
+
+```bash
+python -m development.virtual_audio_experiment --input-wav LOCAL.wav \
+  --output-dir outputs/virtual-local
+```
+
+The library `WavCaptureBackend` provides deterministic unpaced `pump()` for
+tests and `run()` with optional real-time pacing. Queue overflow, oversize
+callbacks, source/callback faults, and processor/writer faults remain terminal
+invalid states; accepted data is not silently dropped or replaced with
+silence.
+
+`SegmentedLiveAudioSession` adds library-level pause/resume: pausing drains and
+finalizes the active segment, retains only recurrent runtime state, and resume
+opens a fresh linked segment with an empty framer and acoustic extractor.
+Global `frame_index` remains monotonic while `sample_offset` resets per
+segment. Boundary checkpoints are allowed only after pause/stop and contain a
+version, projection identity/configuration, runtime capsule, counters, and
+lineage. They deliberately exclude PCM, pending samples, and previous acoustic
+spectrum/history. A checkpoint restore validates before changing runtime and
+can only resume as a new segment; it is not an exact stream replay snapshot.
+
+These tests validate software behavior with synthetic/local WAV material. They
+do not validate operating-system routing, an actual microphone, room acoustics,
+or user speech.
 
 ## Offline acoustic-dynamics probe
 
