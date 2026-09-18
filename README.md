@@ -1,9 +1,10 @@
 # Demian Substrate
 
-Demian Substrate is the runtime package for the current Demian v1 recurrent
-substrate. This repository keeps the small, importable, testable part of the
-research program: the code that owns recurrent state, advances it one step,
-saves it, restores it, and reports what changed inside.
+Demian Substrate is a PyTorch runtime for experiments with explicit recurrent
+state. It advances six named channels, exposes per-step diagnostics, and
+supports checkpoint/restore and controlled ablations. The repository also
+includes deterministic probes that drive the runtime with non-semantic
+acoustic features.
 
 The broader research direction asks whether a machine-native recurrent
 substrate can sustain richer forms of continuity, self-observation, route
@@ -13,6 +14,26 @@ properties assumed or demonstrated by the current runtime.
 This is not the lab notebook. Broad experiment logs, figures, sweeps, failed
 branches, and historical comparisons belong in Demian Lab or Demian Archive.
 This repo keeps the runtime boundary that those experiments pushed toward.
+
+## What you can inspect
+
+- **State continuity:** save all recurrent channels, restore them, and compare
+  the continuation with a surface-only control.
+- **Mechanism controls:** disable or freeze individual channels and measure how
+  the next trajectory changes.
+- **Sensor coupling:** transform synthetic or local PCM audio into bounded,
+  non-semantic features and record the resulting internal trajectory.
+
+The practical question is not whether the runtime is intelligent. It is:
+**does preserving hidden recurrent state change what happens next, and can the
+difference be reproduced and ablated?**
+
+| Evidence | What it supports | Boundary |
+| --- | --- | --- |
+| [`tests/test_demian_v1_public_api.py`](tests/test_demian_v1_public_api.py) | Deterministic construction, snapshot, full restore, and surface-only control | Runtime behavior only |
+| [`tests/test_demian_v1_gate_state.py`](tests/test_demian_v1_gate_state.py) | Gate-state diagnostics and bounded ablations | Does not assign cognitive meaning to channel names |
+| [`docs/VIRTUAL_AUDIO_VALIDATION_2026-09-12.md`](docs/VIRTUAL_AUDIO_VALIDATION_2026-09-12.md) | Dated validation of the virtual live-audio path | Not physical microphone acceptance |
+| [`docs/APPLICATIONS.md`](docs/APPLICATIONS.md) | How public and local experimental consumers relate to this runtime | EEG, Geo, and Zenith are not packaged here |
 
 ## Objective
 
