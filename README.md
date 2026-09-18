@@ -33,7 +33,7 @@ difference be reproduced and ablated?**
 | [`tests/test_demian_v1_public_api.py`](tests/test_demian_v1_public_api.py) | Deterministic construction, snapshot, full restore, and surface-only control | Runtime behavior only |
 | [`tests/test_demian_v1_gate_state.py`](tests/test_demian_v1_gate_state.py) | Gate-state diagnostics and bounded ablations | Does not assign cognitive meaning to channel names |
 | [`docs/VIRTUAL_AUDIO_VALIDATION_2026-09-12.md`](docs/VIRTUAL_AUDIO_VALIDATION_2026-09-12.md) | Dated validation of the virtual live-audio path | Not physical microphone acceptance |
-| [`docs/APPLICATIONS.md`](docs/APPLICATIONS.md) | How public and local experimental consumers relate to this runtime | EEG, Geo, and Zenith are not packaged here |
+| [`docs/APPLICATIONS.md`](docs/APPLICATIONS.md) | How separate public research consumers relate to this runtime | EEG, Geo, and Zenith remain independently bounded packages |
 
 ## Objective
 
