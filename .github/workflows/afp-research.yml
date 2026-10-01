@@ -28,8 +28,23 @@ jobs:
       - name: Smoke experiment
         run: |
           python -m development.afp_baselines             --demian-hidden-size 8             --readout-dim 4             --histories 8             --drive-steps 16             --shared-tail-steps 4             --settle-steps 16             --analysis-window 4             --probe-steps 8             --output-dir outputs/afp-smoke
-      - name: Upload smoke results
+      - name: Exploratory multi-seed batch
+        run: |
+          for seed in 94 95 96; do
+            python -m development.afp_baselines \
+              --demian-hidden-size 16 \
+              --readout-dim 8 \
+              --histories 32 \
+              --drive-steps 64 \
+              --shared-tail-steps 16 \
+              --settle-steps 128 \
+              --analysis-window 32 \
+              --probe-steps 16 \
+              --model-seed "$seed" \
+              --output-dir "outputs/afp-seed-$seed"
+          done
+      - name: Upload AFP results
         uses: actions/upload-artifact@v4
         with:
-          name: afp-smoke-results
-          path: outputs/afp-smoke/
+          name: afp-results
+          path: outputs/
