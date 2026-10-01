@@ -1,0 +1,35 @@
+name: AFP research checks
+
+on:
+  push:
+    branches:
+      - research/afp-baselines-2026-10-01
+  pull_request:
+    paths:
+      - 'development/afp_baselines.py'
+      - 'tests/test_afp_baselines.py'
+      - 'docs/AFP_BASELINE_PROTOCOL.md'
+      - '.github/workflows/afp-research.yml'
+
+jobs:
+  afp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      - name: Install
+        run: python -m pip install -e . pytest
+      - name: Focused tests
+        run: python -m pytest tests/test_afp_baselines.py tests/test_demian_v1_gate_state.py -q
+      - name: Smoke experiment
+        run: |
+          python -m development.afp_baselines             --demian-hidden-size 8             --readout-dim 4             --histories 8             --drive-steps 16             --shared-tail-steps 4             --settle-steps 16             --analysis-window 4             --probe-steps 8             --output-dir outputs/afp-smoke
+      - name: Upload smoke results
+        uses: actions/upload-artifact@v4
+        with:
+          name: afp-smoke-results
+          path: outputs/afp-smoke/
