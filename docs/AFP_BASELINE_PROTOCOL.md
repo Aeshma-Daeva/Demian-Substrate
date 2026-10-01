@@ -42,11 +42,17 @@ For Demian v1, the native surface is produced from `fast`, `message`,
 `carrier`, and `gate`, while the full latent state contains all six channels:
 `fast`, `slow`, `control`, `message`, `carrier`, and `gate`.
 
-For vanilla RNN and GRU, the native hidden state is also their native surface,
-so a native-surface AFP is structurally difficult by definition. The common
-readout still allows the broader projected-dynamics question to be asked fairly.
-LSTM additionally has cell state that is not identical to its exposed hidden
-state.
+For vanilla RNN and GRU, the complete recurrent state is also their native
+surface, so a native-surface AFP is structurally impossible except for numerical
+or threshold artifacts: if the full state moves, the surface moves. Their main
+role is therefore a negative/control case for the native definition. The common
+readout still asks the broader projected-dynamics question fairly.
+
+For the historical LSTM control, the native surface is the same
+`0.5 * (h + c)` surface used by the original Demian baseline battery while the
+full recurrent state remains `[h, c]`. This makes LSTM a useful conventional
+example in which internal motion can in principle be partially hidden by an
+exposed projection.
 
 This distinction prevents the baseline comparison from baking the answer into
 the definition.
@@ -60,14 +66,22 @@ The experiment currently compares:
 - LSTM;
 - Demian v1.
 
-All architectures receive exactly the same bounded temporal input histories.
-The histories have different prefixes and a shared final drive segment, then
-all inputs are clamped to zero for a settling window.
+All architectures receive the same bounded temporal coupling histories.
+The histories have different prefixes and a shared final drive segment. After
+that external coupling is set to zero for a settling window.
+
+The RNN/GRU/LSTM controls preserve the historical Demian self-loop battery:
+their current hidden surface is projected back as the explicit next cell input.
+The common coupling vector is mapped into each baseline hidden space by a fixed,
+seeded, non-trainable projection and added to the exposed hidden state before
+the self-loop step. Demian receives the same common coupling at its native
+coupling boundary.
 
 The standard recurrent baselines are assigned integer hidden sizes that minimize
 the difference between their trainable parameter count and the Demian v1
-parameter count. This is approximate matching, not proof of equal effective
-capacity.
+parameter count, including the historical self-loop input projection. The
+coupling projection is fixed and excluded from that trainable budget. This is
+approximate matching, not proof of equal effective capacity.
 
 The common readout is a deterministic orthogonal projection generated from a
 fixed seed. No architecture is trained to satisfy the AFP criterion.
