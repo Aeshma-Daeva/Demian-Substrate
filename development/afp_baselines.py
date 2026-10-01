@@ -14,7 +14,9 @@ state continues to move measurably.
 
 This module is deliberately a measurement protocol, not a superiority
 benchmark. It runs untrained deterministic recurrent systems under matched
-temporal inputs and approximately matched trainable parameter budgets.
+temporal coupling histories and approximately matched trainable parameter
+budgets. The RNN/GRU/LSTM controls preserve the historical Demian self-loop
+protocol: their current hidden surface is projected back as the next cell input.
 """
 
 from __future__ import annotations
@@ -87,60 +89,106 @@ class RecurrentAdapter:
         raise NotImplementedError
 
 
-class TorchCellAdapter(RecurrentAdapter):
-    """Wrapper around a PyTorch RNN/GRU/LSTM cell."""
+class HistoricalBaselineAdapter(RecurrentAdapter):
+    """RNN/GRU/LSTM wrapper matching the historical Demian self-loop battery.
+
+    The autonomous recurrence is the same shape used by the earlier lab:
+    the current hidden surface is projected back as the explicit cell input.
+    External coupling is an additive perturbation to the exposed hidden state
+    before that self-loop step. A fixed deterministic projection maps the
+    common coupling dimension into each baseline hidden size.
+    """
 
     def __init__(
         self,
         kind: Literal["rnn", "gru", "lstm"],
         *,
-        input_size: int,
+        coupling_size: int,
         hidden_size: int,
         seed: int,
+        init_scale: float = 0.2,
+        feedback_scale: float = 1.0,
+        state_gain: float = 1.0,
     ) -> None:
         self.name = kind
-        self.input_size = input_size
+        self.input_size = coupling_size
         self.hidden_size = hidden_size
+        self.init_scale = init_scale
+        self.feedback_scale = feedback_scale
+        self.state_gain = state_gain
+
         with torch.random.fork_rng():
             torch.manual_seed(seed)
+            self.in_proj = nn.Linear(hidden_size, hidden_size)
             if kind == "rnn":
-                self.cell: nn.Module = nn.RNNCell(input_size, hidden_size, nonlinearity="tanh")
+                self.cell: nn.Module = nn.RNNCell(hidden_size, hidden_size, nonlinearity="tanh")
             elif kind == "gru":
-                self.cell = nn.GRUCell(input_size, hidden_size)
+                self.cell = nn.GRUCell(hidden_size, hidden_size)
             elif kind == "lstm":
-                self.cell = nn.LSTMCell(input_size, hidden_size)
+                self.cell = nn.LSTMCell(hidden_size, hidden_size)
             else:  # pragma: no cover - type narrowing guard
                 raise ValueError(f"unknown baseline kind: {kind}")
+
+        generator = torch.Generator(device="cpu")
+        generator.manual_seed(seed + 10_000)
+        raw = torch.randn(hidden_size, coupling_size, generator=generator)
+        row_norm = torch.linalg.vector_norm(raw, dim=1, keepdim=True).clamp_min(1e-12)
+        self.coupling_projection = raw / row_norm
+
+        with torch.random.fork_rng():
+            torch.manual_seed(seed)
+            h = torch.randn(1, hidden_size) * init_scale
+            if kind == "lstm":
+                self._initial_state: object = (
+                    h,
+                    torch.randn(1, hidden_size) * init_scale,
+                )
+            else:
+                self._initial_state = h
+
+        self.in_proj.eval()
         self.cell.eval()
 
     def initial_state(self) -> object:
-        h = torch.zeros(1, self.hidden_size)
-        if self.name == "lstm":
-            return h, torch.zeros_like(h)
-        return h
+        return _clone_state(self._initial_state)
+
+    def _coupling_delta(self, coupling: torch.Tensor) -> torch.Tensor:
+        vector = coupling.view(-1)
+        if vector.numel() != self.input_size:
+            raise ValueError("baseline_coupling_size_mismatch")
+        return (self.coupling_projection @ vector).view(1, self.hidden_size)
 
     def step(self, state: object, coupling: torch.Tensor) -> object:
-        x = coupling.view(1, self.input_size)
+        delta = self._coupling_delta(coupling)
         with torch.no_grad():
             if self.name == "lstm":
-                h, c = state  # type: ignore[misc]
-                return self.cell(x, (h, c))
-            return self.cell(x, state)  # type: ignore[arg-type]
+                h, cell_state = state  # type: ignore[misc]
+                driven_h = h + delta
+                x = self.feedback_scale * self.in_proj(driven_h)
+                next_h, next_c = self.cell(x, (driven_h, cell_state))
+                return self.state_gain * next_h, self.state_gain * next_c
+
+            hidden = state  # type: ignore[assignment]
+            driven = hidden + delta
+            x = self.feedback_scale * self.in_proj(driven)
+            return self.state_gain * self.cell(x, driven)
 
     def native_surface(self, state: object) -> torch.Tensor:
         if self.name == "lstm":
-            h, _ = state  # type: ignore[misc]
-            return h.view(-1)
+            h, cell_state = state  # type: ignore[misc]
+            return (0.5 * (h + cell_state)).view(-1)
         return state.view(-1)  # type: ignore[union-attr]
 
     def latent_vector(self, state: object) -> torch.Tensor:
         if self.name == "lstm":
-            h, c = state  # type: ignore[misc]
-            return torch.cat([h.view(-1), c.view(-1)])
+            h, cell_state = state  # type: ignore[misc]
+            return torch.cat([h.view(-1), cell_state.view(-1)])
         return state.view(-1)  # type: ignore[union-attr]
 
     def parameter_count(self) -> int:
-        return sum(parameter.numel() for parameter in self.cell.parameters())
+        return sum(parameter.numel() for parameter in self.in_proj.parameters()) + sum(
+            parameter.numel() for parameter in self.cell.parameters()
+        )
 
 
 class DemianAdapter(RecurrentAdapter):
@@ -210,9 +258,9 @@ def _parameter_count_for_baseline(
     hidden_size: int,
     seed: int,
 ) -> int:
-    return TorchCellAdapter(
+    return HistoricalBaselineAdapter(
         kind,
-        input_size=input_size,
+        coupling_size=input_size,
         hidden_size=hidden_size,
         seed=seed,
     ).parameter_count()
@@ -493,9 +541,9 @@ def _make_adapters(config: AFPConfig) -> tuple[dict[ArchitectureName, RecurrentA
             seed=config.model_seed,
             max_hidden=config.max_baseline_hidden,
         )
-        adapter = TorchCellAdapter(
+        adapter = HistoricalBaselineAdapter(
             kind,
-            input_size=config.demian_hidden_size,
+            coupling_size=config.demian_hidden_size,
             hidden_size=hidden_size,
             seed=config.model_seed,
         )
